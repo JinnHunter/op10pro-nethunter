@@ -1,0 +1,6 @@
+# Optional (workflow input "enable_sdr"). Enabling V4L2 SDR support changes
+# V4L2 structures that OnePlus camera modules use -> may break camera/boot.
+# Only enable if you really need Airspy / HackRF as V4L2 devices.
+CONFIG_MEDIA_SDR_SUPPORT=y
+CONFIG_USB_AIRSPY=m
+CONFIG_USB_HACKRF=m

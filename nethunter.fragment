@@ -1,0 +1,82 @@
+# =============================================================================
+# NetHunter config fragment for OnePlus 10 Pro (NE2211) - OxygenOS 15, kernel 5.10
+# Appended to arch/arm64/configs/gki_defconfig before building.
+# Rule of thumb: add DRIVERS (=m / =y), do NOT touch core options (CFI, LTO,
+# SCS, PREEMPT, PM, SMP, NET core, sched, etc.) - changing those changes the
+# kernel ABI and the stock vendor modules in your phone will refuse to load
+# (bootloop / dead Wi-Fi / no touch).
+# =============================================================================
+
+# --- Wi-Fi stack: identical to OnePlus' own vendor/waipio_GKI.config so that
+#     our mac80211/cfg80211 stay compatible with the stock ones --------------
+CONFIG_WLAN=y
+CONFIG_WIRELESS=y
+CONFIG_CFG80211=m
+CONFIG_CFG80211_DEFAULT_PS=y
+CONFIG_CFG80211_CRDA_SUPPORT=y
+CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=y
+CONFIG_CFG80211_USE_KERNEL_REGDB_KEYS=y
+CONFIG_NL80211_TESTMODE=y
+CONFIG_MAC80211=m
+CONFIG_MAC80211_HAS_RC=y
+CONFIG_MAC80211_RC_MINSTREL=y
+CONFIG_MAC80211_RC_DEFAULT_MINSTREL=y
+CONFIG_MAC80211_RC_DEFAULT="minstrel_ht"
+
+# --- External USB Wi-Fi adapters (monitor mode + injection) -----------------
+# Atheros: AR9271 (TP-Link WN722N v1, Alfa AWUS036NHA), AR9170, AR5523
+CONFIG_WLAN_VENDOR_ATH=y
+CONFIG_ATH9K_HTC=m
+CONFIG_CARL9170=m
+CONFIG_AR5523=m
+# Realtek (in-tree): RTL8187 (Alfa AWUS036H), RTL8188/8192 C/E U, RTL8723AU/BU
+CONFIG_WLAN_VENDOR_REALTEK=y
+CONFIG_RTL8187=m
+CONFIG_RTL8XXXU=m
+CONFIG_RTL8XXXU_UNTESTED=y
+CONFIG_RTL_CARDS=m
+CONFIG_RTL8192CU=m
+# Ralink / MediaTek: RT3070, RT3572, RT5370, RT5572, MT7601U, MT76x0U, MT76x2U
+CONFIG_WLAN_VENDOR_RALINK=y
+CONFIG_RT2X00=m
+CONFIG_RT2800USB=m
+CONFIG_RT2800USB_RT3573=y
+CONFIG_RT2800USB_RT53XX=y
+CONFIG_RT2800USB_RT55XX=y
+CONFIG_WLAN_VENDOR_MEDIATEK=y
+CONFIG_MT7601U=m
+CONFIG_MT76x0U=m
+CONFIG_MT76x2U=m
+# Zydas
+CONFIG_WLAN_VENDOR_ZYDAS=y
+CONFIG_ZD1211RW=m
+
+# --- USB gadget (HID keyboard/mouse, RNDIS, mass-storage) -------------------
+# Already =y in stock gki_defconfig; listed so the verify step proves it.
+CONFIG_USB_GADGET=y
+CONFIG_USB_CONFIGFS=y
+CONFIG_USB_CONFIGFS_F_HID=y
+CONFIG_USB_CONFIGFS_RNDIS=y
+CONFIG_USB_CONFIGFS_ECM=y
+CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_CONFIGFS_MASS_STORAGE=y
+CONFIG_USB_CONFIGFS_F_FS=y
+
+# --- USB host side: serial adapters, Ethernet dongles, BT dongles -----------
+CONFIG_USB_ACM=y
+CONFIG_USB_SERIAL=y
+CONFIG_USB_SERIAL_GENERIC=y
+CONFIG_USB_SERIAL_CH341=y
+CONFIG_USB_SERIAL_CP210X=y
+CONFIG_USB_SERIAL_FTDI_SIO=y
+CONFIG_USB_SERIAL_PL2303=y
+CONFIG_USB_NET_CDCETHER=y
+CONFIG_USB_NET_CDC_NCM=y
+CONFIG_USB_NET_RNDIS_HOST=y
+CONFIG_USB_NET_AX8817X=y
+CONFIG_USB_NET_AX88179_178A=y
+CONFIG_USB_NET_SMSC75XX=y
+CONFIG_USB_NET_SMSC95XX=y
+CONFIG_BT_HCIBTUSB=m
+CONFIG_BT_HCIBTUSB_BCM=y
+CONFIG_BT_HCIBTUSB_RTL=y
