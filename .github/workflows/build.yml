@@ -1,0 +1,293 @@
+name: Build NetHunter kernel - OnePlus 10 Pro (NE2211) OxygenOS 15
+
+# Builds the *GKI* part of the OnePlus 5.10 kernel (Image) with NetHunter drivers
+# and ships it as an AnyKernel3 zip. Vendor modules (touch, camera, Wi-Fi, ...) stay
+# the ones from your phone's firmware, so your firmware MUST match the source.
+# (OnePlus source = NE2211_15.0.0.1302 -> see README.md)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: "Branch/tag/commit of OnePlusOSS/android_kernel_common_oneplus_sm8450"
+        default: "oneplus/sm8450_v_15.0.0_oneplus_10_pro"
+      localversion:
+        description: "Kernel version suffix shown in uname -r"
+        default: "-android12-9-nethunter"
+      enable_ksu:
+        description: "Add KernelSU-Next + SUSFS (root, replaces Magisk - you then need the KernelSU-Next manager app)"
+        type: boolean
+        default: true
+      enable_bbg:
+        description: "Add Baseband-guard (blocks writes to modem/EFS/bootloader partitions)"
+        type: boolean
+        default: true
+      block_oplus_modules:
+        description: "Block the Oplus security-guard vendor modules from loading (see block_module_list)"
+        type: boolean
+        default: true
+      block_module_list:
+        description: "Comma list of vendor .ko names to block at boot"
+        default: "oplus_security_guard,oplus_secure_harden,oplus_security_keventupload,oplus_secure_guard_new,oplus_secure_guard"
+      ksun_ref:
+        description: "KernelSU-Next commit (pinned; must match the SUSFS fix patches - 234f6e04 = v33239)"
+        default: "234f6e040fcbca18b16d2398e1aa225712ec99ad"
+      susfs_ref:
+        description: "SUSFS (gki-android12-5.10) commit (pinned; ee7dc7a = v2.2.0)"
+        default: "ee7dc7a"
+      enable_sdr:
+        description: "Also enable Airspy/HackRF (V4L2 SDR) - risky, see nethunter.sdr.fragment"
+        type: boolean
+        default: false
+      debug_single_thread:
+        description: "Re-run the build single-threaded on failure to get a readable error"
+        type: boolean
+        default: true
+
+env:
+  CLANG_REPO: https://git.codelinaro.org/clo/la/kernelplatform/prebuilts-master/clang/host/linux-x86.git
+  # same pins as OnePlusOSS/kernel_manifest oneplus/sm8450 oneplus_10_pro_v.xml
+  CLANG_SHA: 0fc3d01a780023469b7acc18c56a9cf5099a6d6c
+  CLANG_DIR: clang-r416183b
+  KROOT: ${{ github.workspace }}/ksrc
+  KDIR: ${{ github.workspace }}/ksrc/kernel_platform/common
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 3G
+  CCACHE_COMPRESS: "1"
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04          # do NOT use ubuntu-latest (24.04 breaks old 5.10 host tools)
+    timeout-minutes: 240
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev libncurses-dev \
+            lz4 zstd cpio rsync kmod ccache python3 git curl zip unzip xz-utils \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
+          python3 --version; gcc --version | head -1
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-op10pro-${{ github.run_id }}
+          restore-keys: ccache-op10pro-
+
+      - name: Fetch kernel source (OnePlus layout)
+        run: |
+          # OnePlus' "common" repo contains symlinks into the *modules_and_devicetree* repo
+          #   drivers/soc/oplus/storage -> ../../../../../vendor/oplus/kernel/storage
+          # so the layout must be exactly:  <root>/ (modules repo)  +  <root>/kernel_platform/common
+          # Cloning only "common" gives:  'drivers/soc/oplus/storage/Kconfig' not found
+          for i in 1 2 3; do
+            git clone --depth 1 -b "${{ inputs.kernel_ref }}" \
+              https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8450 "$KROOT" && break
+            echo "clone failed, retry $i"; rm -rf "$KROOT"; sleep 10
+          done
+          for i in 1 2 3; do
+            git clone --depth 1 -b "${{ inputs.kernel_ref }}" \
+              https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8450 "$KDIR" && break
+            echo "clone failed, retry $i"; rm -rf "$KDIR"; sleep 10
+          done
+          test -f "$KDIR/Makefile"
+          test -f "$KDIR/drivers/soc/oplus/storage/Kconfig" || { echo "::error::oplus storage symlink is dangling - wrong source layout"; exit 1; }
+          git -C "$KDIR" log -1 --format='Source commit: %h %s'
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL) ' "$KDIR/Makefile"
+
+      - name: Fetch Clang (only the one toolchain dir OnePlus uses)
+        run: |
+          CLANG_ROOT="$KROOT/kernel_platform/prebuilts-master/clang/host/linux-x86"
+          mkdir -p "$CLANG_ROOT" && cd "$CLANG_ROOT"
+          git init -q
+          git remote add origin "$CLANG_REPO"
+          git sparse-checkout init --cone
+          git sparse-checkout set "$CLANG_DIR"
+          for i in 1 2 3; do
+            git fetch --depth 1 --filter=blob:none origin "$CLANG_SHA" && break
+            echo "fetch failed, retry $i"; sleep 15
+          done
+          git checkout -q FETCH_HEAD
+          echo "$CLANG_ROOT/$CLANG_DIR/bin" >> "$GITHUB_PATH"
+          "$CLANG_ROOT/$CLANG_DIR/bin/clang" --version | head -1
+
+      - name: Add KernelSU-Next + SUSFS + Baseband-guard
+        env:
+          WORK: ${{ github.workspace }}/ksu-work
+          OUT_FRAGMENT: ${{ github.workspace }}/ksu.generated.fragment
+          ENABLE_KSU: ${{ inputs.enable_ksu }}
+          ENABLE_BBG: ${{ inputs.enable_bbg }}
+          BLOCK_MODULES: ${{ inputs.block_oplus_modules }}
+          BLOCK_MODULE_LIST: ${{ inputs.block_module_list }}
+          KSUN_REF: ${{ inputs.ksun_ref }}
+          SUSFS_REF: ${{ inputs.susfs_ref }}
+        run: bash "$GITHUB_WORKSPACE/scripts/add_ksu_susfs_bbg.sh"
+
+      - name: Create make wrapper
+        run: |
+          cat > "$GITHUB_WORKSPACE/mk.sh" <<'EOF'
+          #!/bin/bash
+          cd "$KDIR"
+          export KBUILD_BUILD_USER=nethunter KBUILD_BUILD_HOST=github
+          exec make O=out ARCH=arm64 \
+            LLVM=1 LLVM_IAS=1 CROSS_COMPILE=aarch64-linux-gnu- \
+            HOSTCC=gcc HOSTCXX=g++ HOSTLD=ld \
+            CC="ccache clang" \
+            KCFLAGS="-D__ANDROID_COMMON_KERNEL__ -Wno-error -Wno-unused-command-line-argument -Qunused-arguments" \
+            "$@"
+          EOF
+          chmod +x "$GITHUB_WORKSPACE/mk.sh"
+
+      - name: Configure (gki_defconfig + NetHunter fragment)
+        run: |
+          set -eo pipefail
+          cd "$KDIR"
+          : > .scmversion
+          sed -i 's/scm_version="$(scm_version --short)"/scm_version=""/' scripts/setlocalversion || true
+
+          cp arch/arm64/configs/gki_defconfig arch/arm64/configs/nethunter_defconfig
+          cat "$GITHUB_WORKSPACE/nethunter.fragment" >> arch/arm64/configs/nethunter_defconfig
+          if [ "${{ inputs.enable_sdr }}" = "true" ]; then
+            cat "$GITHUB_WORKSPACE/nethunter.sdr.fragment" >> arch/arm64/configs/nethunter_defconfig
+          fi
+          cat "$GITHUB_WORKSPACE/ksu.generated.fragment" >> arch/arm64/configs/nethunter_defconfig
+          "$GITHUB_WORKSPACE/mk.sh" nethunter_defconfig > "$GITHUB_WORKSPACE/defconfig.log" 2>&1 \
+            || { cat "$GITHUB_WORKSPACE/defconfig.log"; exit 1; }
+          grep -v "override: reassigning" "$GITHUB_WORKSPACE/defconfig.log" | tail -n 15 || true
+
+          # Thin LTO (FULL LTO needs >16 GB RAM). CFI stays ON on purpose: it is part
+          # of the stock ABI (struct module layout), switching it off => modules won't load.
+          scripts/config --file out/.config -d LTO_CLANG_FULL -e LTO_CLANG_THIN
+          scripts/config --file out/.config -d LOCALVERSION_AUTO --set-str LOCALVERSION "${{ inputs.localversion }}"
+          "$GITHUB_WORKSPACE/mk.sh" olddefconfig
+
+      - name: Verify the config actually contains what we asked for
+        run: |
+          cd "$KDIR"
+          missing=0
+          check() {
+            grep -E '^CONFIG_[A-Za-z0-9_]+=' "$1" | while IFS== read -r k v; do
+              cur=$(grep -E "^$k=" out/.config | head -1 | cut -d= -f2-)
+              if [ "$cur" != "$v" ]; then
+                echo "::warning title=Config not applied::$k wanted '$v' but got '${cur:-unset}' (missing dependency?)"
+              fi
+            done
+          }
+          check "$GITHUB_WORKSPACE/nethunter.fragment"
+          check "$GITHUB_WORKSPACE/ksu.generated.fragment"
+          [ "${{ inputs.enable_sdr }}" = "true" ] && check "$GITHUB_WORKSPACE/nethunter.sdr.fragment" || true
+          echo "--- ABI-relevant options (must stay =y like stock) ---"
+          grep -E '^CONFIG_(CFI_CLANG|SHADOW_CALL_STACK|LTO_CLANG_THIN|MODVERSIONS|MODULES|MODULE_UNLOAD)=' out/.config
+          echo "--- KSU / SUSFS / BBG ---"
+          grep -E '^CONFIG_(KSU|BBG|DEBLOAT_VENDOR_MODULES|LSM)=?' out/.config || true
+
+      - name: Build Image + modules
+        id: build
+        run: |
+          set -o pipefail
+          ccache -z
+          "$GITHUB_WORKSPACE/mk.sh" -j"$(nproc)" Image modules 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          ccache -s | head -12
+
+      - name: Show the real error if the build failed
+        if: failure() && steps.build.outcome == 'failure'
+        run: |
+          echo "::group::First errors in build.log"
+          grep -nE "error:|Error [0-9]+|undefined (symbol|reference)|ld.lld: error|fatal error|No rule to make target|\*\*\*" build.log | head -40 || true
+          echo "::endgroup::"
+          if [ "${{ inputs.debug_single_thread }}" = "true" ]; then
+            echo "::group::Single-threaded re-run (readable first error)"
+            "$GITHUB_WORKSPACE/mk.sh" -j1 Image modules 2>&1 | tail -n 60 || true
+            echo "::endgroup::"
+          fi
+
+      - name: Sanity-check Image
+        run: |
+          IMG=$KDIR/out/arch/arm64/boot/Image
+          ls -l "$IMG"
+          file "$IMG"
+          test "$(stat -c%s "$IMG")" -gt 10000000
+          strings "$IMG" | grep -m1 "Linux version"
+
+      - name: Package (AnyKernel3 zip + Wi-Fi/USB modules zip)
+        run: |
+          set -eo pipefail
+          cd "$GITHUB_WORKSPACE"
+          KVER=$(cat $KDIR/out/include/config/kernel.release)
+          STAMP=$(date +%Y%m%d-%H%M)
+          TAGS=""; [ "${{ inputs.enable_ksu }}" = "true" ] && TAGS="-KSUN-SUSFS"; [ "${{ inputs.enable_bbg }}" = "true" ] && TAGS="${TAGS}-BBG"
+          NAME="NetHunter-OP10Pro-OOS15-${KVER}${TAGS}-${STAMP}"
+          echo "KVER=$KVER"   >> "$GITHUB_ENV"
+          echo "NAME=$NAME"   >> "$GITHUB_ENV"
+
+          # ---------- 1) AnyKernel3 zip (kernel Image only) ----------
+          git clone -q --depth 1 https://github.com/osm0sis/AnyKernel3 ak3
+          rm -rf ak3/.git ak3/README.md
+          cp anykernel.sh ak3/anykernel.sh
+          cp $KDIR/out/arch/arm64/boot/Image ak3/Image
+          (cd ak3 && zip -qr9 "$GITHUB_WORKSPACE/${NAME}-AK3.zip" . -x '*.git*')
+
+          # ---------- 2) loadable modules (Wi-Fi, BT, ...) ----------
+          STAGE="$GITHUB_WORKSPACE/stage"
+          "$GITHUB_WORKSPACE/mk.sh" INSTALL_MOD_PATH="$STAGE" INSTALL_MOD_STRIP=1 modules_install >/dev/null
+          depmod -b "$STAGE" "$KVER"
+
+          mkdir -p modpack/modules
+          : > order_abs.txt
+          for t in mac80211 ath9k_htc carl9170 ar5523 rtl8187 rtl8xxxu rtl8192cu \
+                   mt7601u mt76x0u mt76x2u rt2800usb zd1211rw btusb airspy hackrf; do
+            modprobe -d "$STAGE" -S "$KVER" --show-depends "$t" 2>/dev/null >> order_abs.txt || true
+          done
+          awk '/^insmod/ && !seen[$2]++ {print $2}' order_abs.txt > order_paths.txt
+          : > modpack/modules/load_order.txt
+          while read -r p; do
+            cp "$p" modpack/modules/
+            basename "$p" >> modpack/modules/load_order.txt
+          done < order_paths.txt
+          echo "Packaged modules:"; cat modpack/modules/load_order.txt
+
+          cat > modpack/load-nethunter-modules.sh <<'EOS'
+          #!/system/bin/sh
+          # Run as root:  su -c "sh /sdcard/nh-modules/load-nethunter-modules.sh"
+          # (copy the unzipped folder to /data/local/tmp first if /sdcard is noexec)
+          cd "$(dirname "$0")/modules" || exit 1
+          # stock mac80211 has no LED-trigger support -> replace it with ours
+          if lsmod | grep -q '^mac80211 '; then
+            rmmod mac80211 2>&1 || echo "could not unload stock mac80211 (in use?)"
+          fi
+          while read -r m; do
+            out=$(insmod "$m" 2>&1) || case "$out" in
+              *"File exists"*) ;;                     # already loaded (e.g. stock cfg80211)
+              *) echo "FAILED $m: $out" ;;
+            esac
+          done < load_order.txt
+          lsmod | grep -E 'mac80211|cfg80211|ath9k|rtl|mt76|rt2800|carl9170|btusb' || true
+          dmesg | tail -n 15
+          EOS
+          cp $KDIR/out/.config modpack/kernel.config
+          (cd modpack && zip -qr9 "$GITHUB_WORKSPACE/${NAME}-modules.zip" .)
+
+          cp $KDIR/out/.config "${NAME}-config.txt"
+          ls -lh *.zip
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME || 'build-logs' }}
+          path: |
+            *-AK3.zip
+            *-modules.zip
+            *-config.txt
+            ksu.generated.fragment
+            build.log
+          if-no-files-found: warn
+        
