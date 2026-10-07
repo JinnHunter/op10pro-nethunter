@@ -79,6 +79,8 @@ if [ "$ENABLE_KSU" = "true" ]; then
   cd "$KDIR"
   patch -p1 --forward < "$SUSFS/kernel_patches/50_add_susfs_in_${SUSFS_BRANCH}.patch" \
     || die "50_add_susfs_in_${SUSFS_BRANCH}.patch does not apply to this kernel source"
+      # this OnePlus tree's set_nameidata() takes 3 args, the SUSFS patch assumes 4 (extra "root" arg)
+  sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL)/set_nameidata(nd, old_dfd, fake_filename)/' "$KDIR/fs/namei.c"
   find . \( -name '*.rej' -o -name '*.orig' \) -not -path './out/*' -not -path './drivers/kernelsu/*' -delete 2>/dev/null || true
 
   cat >> "$OUT_FRAGMENT" <<'EOC'
