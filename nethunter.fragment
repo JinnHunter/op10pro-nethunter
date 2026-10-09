@@ -1,14 +1,4 @@
-# =============================================================================
-# NetHunter config fragment for OnePlus 10 Pro (NE2211) - OxygenOS 15, kernel 5.10
-# Appended to arch/arm64/configs/gki_defconfig before building.
-# Rule of thumb: add DRIVERS (=m / =y), do NOT touch core options (CFI, LTO,
-# SCS, PREEMPT, PM, SMP, NET core, sched, etc.) - changing those changes the
-# kernel ABI and the stock vendor modules in your phone will refuse to load
-# (bootloop / dead Wi-Fi / no touch).
-# =============================================================================
-
-# --- Wi-Fi stack: identical to OnePlus' own vendor/waipio_GKI.config so that
-#     our mac80211/cfg80211 stay compatible with the stock ones --------------
+# --- Wi-Fi stack: identical to OnePlus' own vendor/waipio_GKI.config
 CONFIG_WLAN=y
 CONFIG_WIRELESS=y
 CONFIG_CFG80211=m
@@ -51,8 +41,18 @@ CONFIG_MT76x2U=m
 CONFIG_WLAN_VENDOR_ZYDAS=y
 CONFIG_ZD1211RW=m
 
-# --- USB gadget (HID keyboard/mouse, RNDIS, mass-storage) -------------------
-# Already =y in stock gki_defconfig; listed so the verify step proves it.
+# --- Broadcom USB Wi-Fi (brcmfmac fullmac, 43xxx dongles) -------------------
+# Firmware: /system/etc/firmware/brcm/ (NetHunter pack me already hai)
+CONFIG_WLAN_VENDOR_BROADCOM=y
+CONFIG_BRCMFMAC=m
+CONFIG_BRCMFMAC_USB=y
+CONFIG_BRCMFMAC_PCIE=m
+CONFIG_BRCMSMAC=m
+CONFIG_AT76C50X_USB=m
+CONFIG_P54_COMMON=m
+CONFIG_P54_USB=m
+CONFIG_LIBERTAS=m
+CONFIG_LIBERTAS_USB=m
 CONFIG_USB_GADGET=y
 CONFIG_USB_CONFIGFS=y
 CONFIG_USB_CONFIGFS_F_HID=y
