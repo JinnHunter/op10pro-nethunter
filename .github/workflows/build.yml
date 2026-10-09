@@ -246,6 +246,16 @@ jobs:
           "$GITHUB_WORKSPACE/mk.sh" M="$EXT" CONFIG_88XXAU=m -j"$(nproc)" modules
           ls -l "$EXT/88XXau.ko"
 
+      - name: Build out-of-tree Realtek 8188EU (RTL8188EUS mini adapters)
+        run: |
+          set -eo pipefail
+          EXT2="$GITHUB_WORKSPACE/ext_wifi2"
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8188eus.git "$EXT2"
+          # same GCC-only flag problem as 88XXau -> strip for clang
+          sed -i 's/-Wno-cast-function-type//g' "$EXT2/Makefile"
+          "$GITHUB_WORKSPACE/mk.sh" M="$EXT2" CONFIG_RTL8188EU=m -j"$(nproc)" modules
+          ls -l "$EXT2/8188eu.ko"
+
       - name: Package (AnyKernel3 zip + Wi-Fi/USB modules zip)
         run: |
           set -eo pipefail
@@ -286,6 +296,11 @@ jobs:
           if [ -f "$GITHUB_WORKSPACE/ext_wifi/88XXau.ko" ]; then
             cp "$GITHUB_WORKSPACE/ext_wifi/88XXau.ko" modpack/modules/
             echo "88XXau.ko" >> modpack/modules/load_order.txt
+          fi
+          # out-of-tree Realtek 8188EU (mini RTL8188EUS adapters, 0bda:0179)
+          if [ -f "$GITHUB_WORKSPACE/ext_wifi2/8188eu.ko" ]; then
+            cp "$GITHUB_WORKSPACE/ext_wifi2/8188eu.ko" modpack/modules/
+            echo "8188eu.ko" >> modpack/modules/load_order.txt
           fi
           echo "Packaged modules:"; cat modpack/modules/load_order.txt
 
