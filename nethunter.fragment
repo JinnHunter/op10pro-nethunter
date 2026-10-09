@@ -1,4 +1,5 @@
-# --- Wi-Fi stack: identical to OnePlus' own vendor/waipio_GKI.config
+# --- Wi-Fi stack: identical to OnePlus' own vendor/waipio_GKI.config so that
+#     our mac80211/cfg80211 stay compatible with the stock ones --------------
 CONFIG_WLAN=y
 CONFIG_WIRELESS=y
 CONFIG_CFG80211=m
@@ -48,11 +49,27 @@ CONFIG_BRCMFMAC=m
 CONFIG_BRCMFMAC_USB=y
 CONFIG_BRCMFMAC_PCIE=m
 CONFIG_BRCMSMAC=m
+
+# --- Legacy 2.4 GHz extras (saste purane dongles, future-proofing) ---------
+# Atmel AT76C50x, Intersil Prism54 (p54), Marvell Libertas (8388 etc.)
 CONFIG_AT76C50X_USB=m
 CONFIG_P54_COMMON=m
 CONFIG_P54_USB=m
 CONFIG_LIBERTAS=m
 CONFIG_LIBERTAS_USB=m
+
+# --- NOTE: ye families kernel 5.10 me POSSIBLE NAHI hain (verified 2026-10-09)
+# rtw88  : 5.10 me sirf PCIe (8822be/8822ce/8723de/8821ce) - USB support 5.10
+#          me hai hi nahi (torvalds v5.10 rtw88/Makefile me koi *_BU nahi).
+#          USB BU/CU dongles (T4U v3, 8822BU) = kernel 6.14+ (rtw88 USB) ya
+#          out-of-tree 88x2bu (repo ab dead/404). => BU adapters MAT KHARIDO.
+# rtw89  : 5.10 tree me exists hi nahi (WiFi 6, kernel 5.13+ se aaya).
+#          => rtw89/8852 adapters bhi 5.10 pe nahi chalenge.
+# 88XXau : out-of-tree build .github/workflows/build.yml me added hai
+#          (aircrack-ng/rtl8812au) - 8812AU/8821AU/8811AU cover karta hai.
+
+# --- USB gadget (HID keyboard/mouse, RNDIS, mass-storage) -------------------
+# Already =y in stock gki_defconfig; listed so the verify step proves it.
 CONFIG_USB_GADGET=y
 CONFIG_USB_CONFIGFS=y
 CONFIG_USB_CONFIGFS_F_HID=y
