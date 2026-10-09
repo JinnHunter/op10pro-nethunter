@@ -14,7 +14,7 @@ git -C "$KP" checkout -q "$KP_REF"
 
 cd "$KDIR"
 
-# Apply chain: strict git apply -> 3-way merge -> patch -p1 with fuzz
+# Apply chain: strict git apply -> ignore-whitespace -> patch -p1 -> patch fuzz3
 apply() {
   local p="$1" b
   b=$(basename "$p")
@@ -25,14 +25,22 @@ apply() {
   if git apply --check "$p" 2>/dev/null; then
     git apply "$p" && { echo "APPLIED: $b"; return 0; }
   fi
-  if git apply --check -3 "$p" 2>/dev/null; then
-    git apply -3 "$p" && { echo "APPLIED (3way): $b"; return 0; }
+  if git apply --check --ignore-whitespace "$p" 2>/dev/null; then
+    git apply --ignore-whitespace "$p" && { echo "APPLIED (iws): $b"; return 0; }
   fi
   if patch -p1 --dry-run -f -s <"$p" >/dev/null 2>&1; then
-    patch -p1 -f -s <"$p" && { echo "APPLIED (fuzz): $b"; return 0; }
+    patch -p1 -f -s <"$p" && { echo "APPLIED (patch): $b"; return 0; }
+  fi
+  if patch -p1 --dry-run -f -s --fuzz=3 --ignore-whitespace <"$p" >/dev/null 2>&1; then
+    patch -p1 -f -s --fuzz=3 --ignore-whitespace <"$p" && { echo "APPLIED (fuzz3): $b"; return 0; }
   fi
   echo "::error::patch does NOT apply cleanly: $b"
   return 1
+}
+
+# optional = skip with warning if it can't apply (device-tree dependent patches)
+apply_opt() {
+  apply "$1" || echo "::warning::SKIPPED (not applicable on this tree): $(basename "$1")"
 }
 
 # --- root-hiding hardening (kernels < 5.16) ---------------------------------
@@ -48,10 +56,10 @@ apply "$KP/common/ntsync/ntsync_base.patch"
 # OOS15 userspace = A14+ SELinux policy variant
 apply "$KP/common/ntsync/ntsync_compat_android12-5.10_A14.patch"
 
-# --- Droidspaces kABI guards (keep stock vendor modules loading!) -----------
-apply "$KP/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch"
-apply "$KP/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch"
-apply "$KP/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch"
+# --- Droidspaces kABI guards (optional on OnePlus: stock already SYSVIPC=y) -
+apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch"
+apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch"
+apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch"
 apply "$KP/common/droidspaces/fix_abi_padding_for_posix_mqueue.patch"
 apply "$KP/common/droidspaces/0001-Guard-USER_NS-for-non-root-users.patch"
 # oplus BSP ghost-task fix (OnePlus trees)
