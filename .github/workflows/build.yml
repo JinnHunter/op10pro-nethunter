@@ -235,6 +235,10 @@ jobs:
           set -eo pipefail
           EXT="$GITHUB_WORKSPACE/ext_wifi"
           git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$EXT"
+          # aircrack-ng Makefile passes 2 GCC-only -W suppressions (lines 9 & 15);
+          # clang + -Wunknown-warning-option treats them as fatal -> strip them.
+          sed -i 's/-Wno-cast-function-type//g; s/-Wno-stringop-overread//g' "$EXT/Makefile"
+          grep -n "cast-function-type\|stringop-overread" "$EXT/Makefile" || echo "88XXau Makefile flags cleaned"
           # Kernel O=out is already built above. Build the driver as an external
           # module (M=) against it so it gets the SAME clang/CFI/modversions flags
           # as the in-tree modules -> ABI matches and insmod will accept it.
