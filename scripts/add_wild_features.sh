@@ -43,6 +43,16 @@ apply_opt() {
   apply "$1" || echo "::warning::SKIPPED (not applicable on this tree): $(basename "$1")"
 }
 
+# dry-run version of the same 4-method chain
+can_apply() {
+  local p="$1"
+  git apply --check "$p" 2>/dev/null && return 0
+  git apply --check --ignore-whitespace "$p" 2>/dev/null && return 0
+  patch -p1 --dry-run -f -s <"$p" >/dev/null 2>&1 && return 0
+  patch -p1 --dry-run -f -s --fuzz=3 --ignore-whitespace <"$p" >/dev/null 2>&1 && return 0
+  return 1
+}
+
 # --- root-hiding hardening (kernels < 5.16) ---------------------------------
 apply "$KP/gki_ptrace.patch"
 
@@ -56,10 +66,17 @@ apply "$KP/common/ntsync/ntsync_base.patch"
 # OOS15 userspace = A14+ SELinux policy variant
 apply "$KP/common/ntsync/ntsync_compat_android12-5.10_A14.patch"
 
-# --- Droidspaces kABI guards (optional on OnePlus: stock already SYSVIPC=y) -
-apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch"
-apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch"
-apply_opt "$KP/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch"
+# --- Droidspaces kABI guards: ALL-OR-NOTHING (3 parts of ONE change!) --------
+# Aadha lagana = ipc/ compile error. Teeno dry-check karo, phir sab lagao.
+S1="$KP/common/droidspaces/fix_sysvipc_kabi_1_2_3.patch"
+S2="$KP/common/droidspaces/fix_sysvipc_kabi_3_4_5.patch"
+S3="$KP/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch"
+if can_apply "$S1" && can_apply "$S2" && can_apply "$S3"; then
+  apply "$S1" && apply "$S2" && apply "$S3"
+  echo "sysvipc kABI guards: all 3 applied"
+else
+  echo "::warning::sysvipc kABI guards SKIPPED (all-or-nothing; stock SYSVIPC=y on this device, safe)"
+fi
 apply "$KP/common/droidspaces/fix_abi_padding_for_posix_mqueue.patch"
 apply "$KP/common/droidspaces/0001-Guard-USER_NS-for-non-root-users.patch"
 # oplus BSP ghost-task fix (OnePlus trees)
