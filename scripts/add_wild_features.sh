@@ -58,8 +58,15 @@ apply "$KP/gki_ptrace.patch"
 
 # --- BBRv3 (android12-5.10 backport) ----------------------------------------
 apply "$KP/common/bbrv3/0001-net-tcp-backport-BBRv3-to-android12-5.10.patch"
-apply "$KP/common/bbrv3/sysctl_add_proc_dou8vec_minmax.patch"
-apply "$KP/common/bbrv3/sysctl_fix_data-races_in_proc_dou8vec_minmax.patch"
+# OnePlus stock tree ALREADY ships proc_dou8vec_minmax (kernel/sysctl.c:1078 +
+# sysctl.h decl). Applying sysctl_add there = redefinition compile error.
+if grep -q "^int proc_dou8vec_minmax" kernel/sysctl.c; then
+  echo "proc_dou8vec_minmax already in stock tree: sysctl_add skipped"
+  apply_opt "$KP/common/bbrv3/sysctl_fix_data-races_in_proc_dou8vec_minmax.patch"
+else
+  apply "$KP/common/bbrv3/sysctl_add_proc_dou8vec_minmax.patch"
+  apply "$KP/common/bbrv3/sysctl_fix_data-races_in_proc_dou8vec_minmax.patch"
+fi
 
 # --- NTSync (wine/winlator sync primitives) ---------------------------------
 apply "$KP/common/ntsync/ntsync_base.patch"
