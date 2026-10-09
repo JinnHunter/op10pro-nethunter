@@ -1,11 +1,3 @@
-#!/bin/bash
-# =============================================================================
-# WildKernels feature patches for the OnePlus 10 Pro (android12-5.10) tree:
-#   BBRv3, NTSync, Droidspaces kABI guards, IPv6-NAT fix, Ptrace leak fix,
-#   Unicode bypass fix
-# Source: https://github.com/WildKernels/kernel_patches (pinned commit)
-# Called from .github/workflows/build.yml with $KDIR + $GITHUB_WORKSPACE set.
-# =============================================================================
 set -eo pipefail
 : "${KDIR:?KDIR not set}"
 : "${GITHUB_WORKSPACE:?}"
@@ -21,30 +13,30 @@ done
 git -C "$KP" checkout -q "$KP_REF"
 
 cd "$KDIR"
+
+# Apply chain: strict git apply -> 3-way merge -> patch -p1 with fuzz
 apply() {
-  local p="$1"
+  local p="$1" b
+  b=$(basename "$p")
   if [ ! -e "$p" ]; then
-    echo "::warning::patch missing in kernel_patches repo: $(basename "$p")"
+    echo "::warning::patch missing in kernel_patches repo: $b"
     return 0
   fi
   if git apply --check "$p" 2>/dev/null; then
-    git apply "$p"
-    echo "APPLIED: $(basename "$p")"
-  else
-    echo "::error::patch does NOT apply cleanly: $(basename "$p")"
-    return 1
+    git apply "$p" && { echo "APPLIED: $b"; return 0; }
   fi
+  if git apply --check -3 "$p" 2>/dev/null; then
+    git apply -3 "$p" && { echo "APPLIED (3way): $b"; return 0; }
+  fi
+  if patch -p1 --dry-run -f -s <"$p" >/dev/null 2>&1; then
+    patch -p1 -f -s <"$p" && { echo "APPLIED (fuzz): $b"; return 0; }
+  fi
+  echo "::error::patch does NOT apply cleanly: $b"
+  return 1
 }
 
 # --- root-hiding hardening (kernels < 5.16) ---------------------------------
 apply "$KP/gki_ptrace.patch"
-
-# --- unicode bypass fix (experimental; name may vary) -----------------------
-shopt -s nullglob
-for p in "$KP"/common/*nicode*.patch "$KP"/common/*unicode*.patch; do
-  apply "$p" || true
-done
-shopt -u nullglob
 
 # --- BBRv3 (android12-5.10 backport) ----------------------------------------
 apply "$KP/common/bbrv3/0001-net-tcp-backport-BBRv3-to-android12-5.10.patch"
