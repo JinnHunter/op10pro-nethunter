@@ -217,6 +217,18 @@ jobs:
           test "$(stat -c%s "$IMG")" -gt 10000000
           strings "$IMG" | grep -m1 "Linux version"
 
+      - name: Build out-of-tree Realtek 88XXau (monitor mode + injection)
+        run: |
+          set -eo pipefail
+          EXT="$GITHUB_WORKSPACE/ext_wifi"
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$EXT"
+          # Kernel O=out is already built above. Build the driver as an external
+          # module (M=) against it so it gets the SAME clang/CFI/modversions flags
+          # as the in-tree modules -> ABI matches and insmod will accept it.
+          # CONFIG_88XXAU=m is mandatory (driver Makefile: obj-$(CONFIG_88XXAU)).
+          "$GITHUB_WORKSPACE/mk.sh" M="$EXT" CONFIG_88XXAU=m -j"$(nproc)" modules
+          ls -l "$EXT/88XXau.ko"
+
       - name: Package (AnyKernel3 zip + Wi-Fi/USB modules zip)
         run: |
           set -eo pipefail
@@ -243,7 +255,8 @@ jobs:
           mkdir -p modpack/modules
           : > order_abs.txt
           for t in mac80211 ath9k_htc carl9170 ar5523 rtl8187 rtl8xxxu rtl8192cu \
-                   mt7601u mt76x0u mt76x2u rt2800usb zd1211rw btusb airspy hackrf; do
+                   mt7601u mt76x0u mt76x2u rt2800usb zd1211rw btusb airspy hackrf \
+                   brcmfmac brcmsmac at76c50x_usb p54usb libertas_usb; do
             modprobe -d "$STAGE" -S "$KVER" --show-depends "$t" 2>/dev/null >> order_abs.txt || true
           done
           awk '/^insmod/ && !seen[$2]++ {print $2}' order_abs.txt > order_paths.txt
@@ -252,6 +265,11 @@ jobs:
             cp "$p" modpack/modules/
             basename "$p" >> modpack/modules/load_order.txt
           done < order_paths.txt
+          # out-of-tree Realtek 88XXau (T2U Plus/Nano 8811AU, U12/T4U v1v2 8812AU)
+          if [ -f "$GITHUB_WORKSPACE/ext_wifi/88XXau.ko" ]; then
+            cp "$GITHUB_WORKSPACE/ext_wifi/88XXau.ko" modpack/modules/
+            echo "88XXau.ko" >> modpack/modules/load_order.txt
+          fi
           echo "Packaged modules:"; cat modpack/modules/load_order.txt
 
           cat > modpack/load-nethunter-modules.sh <<'EOS'
@@ -269,7 +287,7 @@ jobs:
               *) echo "FAILED $m: $out" ;;
             esac
           done < load_order.txt
-          lsmod | grep -E 'mac80211|cfg80211|ath9k|rtl|mt76|rt2800|carl9170|btusb' || true
+          lsmod | grep -E 'mac80211|cfg80211|ath9k|rtl|mt76|rt2800|carl9170|btusb|88|brcm|p54|lbs|at76' || true
           dmesg | tail -n 15
           EOS
           cp $KDIR/out/.config modpack/kernel.config
