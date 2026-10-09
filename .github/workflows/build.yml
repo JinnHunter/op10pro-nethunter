@@ -39,6 +39,10 @@ on:
         description: "Also enable Airspy/HackRF (V4L2 SDR) - risky, see nethunter.sdr.fragment"
         type: boolean
         default: false
+      enable_wild:
+        description: "Add WildKernels features: BBRv3, NTSync, Droidspaces, TTL/IPSet/IPv6-NAT, Ptrace+Unicode fixes"
+        type: boolean
+        default: true
       debug_single_thread:
         description: "Re-run the build single-threaded on failure to get a readable error"
         type: boolean
@@ -131,6 +135,12 @@ jobs:
           SUSFS_REF: ${{ inputs.susfs_ref }}
         run: bash "$GITHUB_WORKSPACE/scripts/add_ksu_susfs_bbg.sh"
 
+      - name: Add Wild features (BBRv3/NTSync/Droidspaces/TTL/IPSet/IPv6NAT)
+        if: ${{ inputs.enable_wild }}
+        env:
+          KDIR: ${{ env.KDIR }}
+        run: bash "$GITHUB_WORKSPACE/scripts/add_wild_features.sh"
+
       - name: Create make wrapper
         run: |
           cat > "$GITHUB_WORKSPACE/mk.sh" <<'EOF'
@@ -157,6 +167,9 @@ jobs:
           cat "$GITHUB_WORKSPACE/nethunter.fragment" >> arch/arm64/configs/nethunter_defconfig
           if [ "${{ inputs.enable_sdr }}" = "true" ]; then
             cat "$GITHUB_WORKSPACE/nethunter.sdr.fragment" >> arch/arm64/configs/nethunter_defconfig
+          fi
+          if [ "${{ inputs.enable_wild }}" = "true" ]; then
+            cat "$GITHUB_WORKSPACE/nethunter.wild.fragment" >> arch/arm64/configs/nethunter_defconfig
           fi
           cat "$GITHUB_WORKSPACE/ksu.generated.fragment" >> arch/arm64/configs/nethunter_defconfig
           "$GITHUB_WORKSPACE/mk.sh" nethunter_defconfig > "$GITHUB_WORKSPACE/defconfig.log" 2>&1 \
@@ -308,4 +321,3 @@ jobs:
             ksu.generated.fragment
             build.log
           if-no-files-found: warn
-        
