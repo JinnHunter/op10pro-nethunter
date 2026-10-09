@@ -1,0 +1,54 @@
+# =============================================================================
+# Wild-features fragment (BBRv3 / NTSync / Droidspaces / netfilter extras)
+# Appended ONLY when enable_wild=true in the workflow.
+# Patches for these come from scripts/add_wild_features.sh
+# (WildKernels/kernel_patches, pinned). KABI-guard patches wahan lagte hain
+# taaki stock vendor modules phir bhi load hon.
+# =============================================================================
+
+# --- BBR (v3 patch implementation replace karta hai) as default TCP cong ----
+CONFIG_TCP_CONG_BBR=y
+CONFIG_DEFAULT_BBR=y
+CONFIG_DEFAULT_TCP_CONG="bbr"
+# Traffic shaping (CAKE) - fq/fq_codel stock me already hain
+CONFIG_NET_SCH_CAKE=m
+
+# --- TTL / Hop-limit targets (TTL spoofing tools) ----------------------------
+CONFIG_IP_NF_TARGET_TTL=m
+CONFIG_IP6_NF_TARGET_HL=m
+
+# --- IP set + xt_set (advanced firewall blocklists) --------------------------
+CONFIG_IP_SET=m
+CONFIG_IP_SET_HASH_IP=m
+CONFIG_IP_SET_HASH_NET=m
+CONFIG_NETFILTER_XT_SET=m
+
+# --- IPv6 NAT + masquerade ----------------------------------------------------
+CONFIG_NF_NAT=m
+CONFIG_IP6_NF_NAT=m
+CONFIG_NETFILTER_XT_TARGET_MASQUERADE=m
+CONFIG_NF_NAT_REDIRECT=m
+
+# --- UFW / Fail2ban helpers ----------------------------------------------------
+CONFIG_IP_NF_TARGET_REJECT=m
+CONFIG_IP6_NF_TARGET_REJECT=m
+CONFIG_NETFILTER_XT_TARGET_LOG=m
+CONFIG_NETFILTER_XT_MATCH_RECENT=m
+
+# --- Droidspaces (Linux containers on Android) core requirements -------------
+CONFIG_SYSVIPC=y
+CONFIG_POSIX_MQUEUE=y
+CONFIG_USER_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_DEVTMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_XATTR=y
+CONFIG_OVERLAY_FS=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=m
+CONFIG_VETH=m
+CONFIG_BRIDGE=m
+CONFIG_BRIDGE_NETFILTER=m
+
+# --- NTSync (built-in taaki autoload ka jhanjhat nahi) ------------------------
+CONFIG_NTSYNC=y
