@@ -253,6 +253,8 @@ jobs:
           git clone --depth=1 https://github.com/aircrack-ng/rtl8188eus.git "$EXT2"
           # same GCC-only flag problem as 88XXau -> strip for clang
           sed -i 's/-Wno-cast-function-type//g' "$EXT2/Makefile"
+          # driver uses filp_open/kernel_read -> must import the VFS namespace
+          sed -i 's|^MODULE_LICENSE("GPL");|MODULE_LICENSE("GPL");\nMODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);|' "$EXT2/os_dep/linux/os_intfs.c"
           "$GITHUB_WORKSPACE/mk.sh" M="$EXT2" CONFIG_RTL8188EU=m -j"$(nproc)" modules
           ls -l "$EXT2/8188eu.ko"
 
