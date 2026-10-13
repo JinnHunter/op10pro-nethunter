@@ -2,11 +2,10 @@
 # Wild-features fragment (BBRv3 / NTSync / Droidspaces / netfilter extras)
 # Appended ONLY when enable_wild=true in the workflow.
 # Patches for these come from scripts/add_wild_features.sh
-# (WildKernels/kernel_patches, pinned). KABI-guard patches wahan lagte hain
-# taaki stock vendor modules phir bhi load hon.
+# (WildKernels/kernel_patches, pinned)
 # =============================================================================
 
-# --- BBR (v3 patch implementation replace karta hai) as default TCP cong ----
+# --- BBR (v3 patch implementation)
 CONFIG_TCP_CONG_BBR=y
 CONFIG_DEFAULT_BBR=y
 CONFIG_DEFAULT_TCP_CONG="bbr"
@@ -49,6 +48,4 @@ CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=m
 CONFIG_VETH=m
 CONFIG_BRIDGE=m
 CONFIG_BRIDGE_NETFILTER=m
-
-# --- NTSync (built-in taaki autoload ka jhanjhat nahi) ------------------------
 CONFIG_NTSYNC=y
